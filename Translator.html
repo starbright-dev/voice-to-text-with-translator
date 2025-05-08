@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Voice to Text Translator</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: '#5D5CDE',
+            'primary-dark': '#4a49b1',
+            'primary-light': '#7b7aed'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    html.dark {
+      transition: all 0.3s ease;
+    }
+    .fade-in { animation: fadeIn 0.5s; }
+    @keyframes fadeIn { 0% {opacity: 0;} 100% {opacity: 1;} }
+    .pulse { animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%, 100% {opacity: 1;} 50% {opacity: 0.5;} }
+  </style>
+</head>
+<body class="bg-white dark:bg-gray-900 min-h-screen transition-colors duration-300">
+
+<div class="container mx-auto px-4 py-8 max-w-4xl">
+  <h1 class="text-4xl font-bold text-center text-gray-800 dark:text-white mb-8">
+    <span class="text-primary dark:text-primary-light">Voice</span> to Text Translator
+  </h1>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <!-- Speech Recognition Panel -->
+    <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 shadow-md">
+      <h2 class="text-xl font-semibold text-gray-800 dark:text-white mb-4">Speech Recognition</h2>
+
+      <label for="recognitionLanguage" class="block text-sm mb-1 text-gray-700 dark:text-gray-300">Language</label>
+      <select id="recognitionLanguage" class="w-full mb-4 p-2 rounded bg-white dark:bg-gray-700 dark:text-white">
+        <option value="en-US">English</option>
+        <option value="zh-CN">Chinese</option>
+        <option value="es-ES">Spanish</option>
+        <option value="ar-SA">Arabic</option>
+        <option value="hi-IN">Hindi</option>
+      </select>
+
+      <div class="flex space-x-3 mb-4">
+        <button id="startBtn" class="flex-1 py-2 px-4 bg-primary text-white rounded hover:bg-primary-dark">Start Recording</button>
+        <button id="stopBtn" class="flex-1 py-2 px-4 bg-red-500 text-white rounded opacity-50 cursor-not-allowed" disabled>Stop</button>
+      </div>
+
+      <div id="recordingIndicator" class="hidden mb-2 text-red-500 flex items-center">
+        <span class="h-3 w-3 bg-red-500 rounded-full pulse mr-2"></span> Recording...
+      </div>
+
+      <textarea id="transcriptionText" class="w-full h-48 p-3 rounded border bg-white dark:bg-gray-700 dark:text-white" placeholder="Your speech will appear here..."></textarea>
+      <button id="copyBtn" class="mt-4 py-2 px-4 bg-gray-300 dark:bg-gray-700 rounded hover:bg-gray-400 dark:hover:bg-gray-600 text-gray-800 dark:text-white">Copy Text</button>
+    </div>
+
+    <!-- Translation Panel -->
+    <div class="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 shadow-md">
+      <h2 class="text-xl font-semibold text-gray-800 dark:text-white mb-4">Translation</h2>
+
+      <div class="grid grid-cols-2 gap-4 mb-4">
+        <div>
+          <label for="sourceLanguage" class="block text-sm text-gray-700 dark:text-gray-300 mb-1">From</label>
+          <select id="sourceLanguage" class="w-full p-2 rounded bg-white dark:bg-gray-700 dark:text-white">
+            <option value="en">English</option>
+            <option value="zh">Chinese</option>
+            <option value="es">Spanish</option>
+            <option value="ar">Arabic</option>
+            <option value="hi">Hindi</option>
+          </select>
+        </div>
+        <div>
+          <label for="targetLanguage" class="block text-sm text-gray-700 dark:text-gray-300 mb-1">To</label>
+          <select id="targetLanguage" class="w-full p-2 rounded bg-white dark:bg-gray-700 dark:text-white">
+            <option value="en">English</option>
+            <option value="zh" selected>Chinese</option>
+            <option value="es">Spanish</option>
+            <option value="ar">Arabic</option>
+            <option value="hi">Hindi</option>
+          </select>
+        </div>
+      </div>
+
+      <button id="translateBtn" class="w-full mb-4 py-2 px-4 bg-primary text-white rounded hover:bg-primary-dark">Translate</button>
+
+      <div id="translationLoading" class="hidden text-center mb-2">Translating...</div>
+      <textarea id="translationText" class="w-full h-48 p-3 rounded border bg-white dark:bg-gray-700 dark:text-white" readonly placeholder="Translated text will appear here..."></textarea>
+      <button id="copyTranslationBtn" class="mt-4 py-2 px-4 bg-gray-300 dark:bg-gray-700 rounded hover:bg-gray-400 dark:hover:bg-gray-600 text-gray-800 dark:text-white">Copy Translation</button>
+    </div>
+  </div>
+
+  <div id="statusMessage" class="mt-4 py-2 px-4 rounded text-center hidden"></div>
+</div>
+
+<script>
+  // Dark mode support
+  if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    document.documentElement.classList.add('dark');
+  }
+
+  const startBtn = document.getElementById('startBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  const transcriptionText = document.getElementById('transcriptionText');
+  const copyBtn = document.getElementById('copyBtn');
+  const recordingIndicator = document.getElementById('recordingIndicator');
+  const recognitionLanguage = document.getElementById('recognitionLanguage');
+  const sourceLanguage = document.getElementById('sourceLanguage');
+  const targetLanguage = document.getElementById('targetLanguage');
+  const translateBtn = document.getElementById('translateBtn');
+  const translationText = document.getElementById('translationText');
+  const copyTranslationBtn = document.getElementById('copyTranslationBtn');
+  const translationLoading = document.getElementById('translationLoading');
+  const statusMessage = document.getElementById('statusMessage');
+
+  let recognition;
+  let isRecording = false;
+
+  function showStatus(message, type = 'info') {
+    statusMessage.textContent = message;
+    statusMessage.className = 'mt-4 py-2 px-4 rounded text-center fade-in';
+
+    if (type === 'error') {
+      statusMessage.classList.add('bg-red-100', 'text-red-800');
+    } else if (type === 'success') {
+      statusMessage.classList.add('bg-green-100', 'text-green-800');
+    } else {
+      statusMessage.classList.add('bg-blue-100', 'text-blue-800');
+    }
+
+    statusMessage.classList.remove('hidden');
+    setTimeout(() => statusMessage.classList.add('hidden'), 3000);
+  }
+
+  function initSpeechRecognition() {
+    window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!window.SpeechRecognition) {
+      showStatus("Speech Recognition not supported", "error");
+      return false;
+    }
+
+    recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    recognition.onstart = () => {
+      isRecording = true;
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      startBtn.classList.add("opacity-50", "cursor-not-allowed");
+      stopBtn.classList.remove("opacity-50", "cursor-not-allowed");
+      recordingIndicator.classList.remove("hidden");
+      showStatus("Recording started");
+    };
+
+    recognition.onerror = (e) => {
+      console.error(e);
+      stopRecording();
+      showStatus("Error during recording: " + e.error, "error");
+    };
+
+    recognition.onend = () => {
+      if (isRecording) recognition.start();
+    };
+
+    recognition.onresult = (event) => {
+      let interim = "", final = "";
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) final += transcript + " ";
+        else interim += transcript;
+      }
+      transcriptionText.value = (transcriptionText.value + final + interim).trim();
+      updateSourceLanguage();
+    };
+
+    return true;
+  }
+
+  function startRecording() {
+    if (!recognition && !initSpeechRecognition()) return;
+    recognition.lang = recognitionLanguage.value;
+    recognition.start();
+  }
+
+  function stopRecording() {
+    if (recognition) {
+      isRecording = false;
+      recognition.stop();
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      startBtn.classList.remove("opacity-50", "cursor-not-allowed");
+      stopBtn.classList.add("opacity-50", "cursor-not-allowed");
+      recordingIndicator.classList.add("hidden");
+      showStatus("Recording stopped");
+    }
+  }
+
+  function updateSourceLanguage() {
+    const langMap = {
+      'en-US': 'en',
+      'zh-CN': 'zh',
+      'es-ES': 'es',
+      'ar-SA': 'ar',
+      'hi-IN': 'hi'
+    };
+    sourceLanguage.value = langMap[recognitionLanguage.value] || 'en';
+  }
+
+  async function translateText() {
+    const text = transcriptionText.value.trim();
+    if (!text) {
+      showStatus('Please record or type some text first', 'error');
+      return;
+    }
+
+    const fromLang = sourceLanguage.value;
+    const toLang = targetLanguage.value;
+    if (fromLang === toLang) {
+      showStatus('Source and target languages are the same', 'error');
+      return;
+    }
+
+    translationLoading.classList.remove('hidden');
+    translationText.value = '';
+
+    try {
+      const res = await fetch('https://libretranslate.de/translate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          q: text,
+          source: fromLang,
+          target: toLang,
+          format: "text"
+        })
+      });
+      const data = await res.json();
+      translationText.value = data.translatedText;
+      showStatus('Translation completed', 'success');
+    } catch (err) {
+      console.error(err);
+      showStatus('Translation failed. Try again.', 'error');
+    } finally {
+      translationLoading.classList.add('hidden');
+    }
+  }
+
+  async function copyToClipboard(text, button) {
+    try {
+      await navigator.clipboard.writeText(text);
+      button.textContent = "✓ Copied!";
+      setTimeout(() => button.textContent = "Copy Text", 2000);
+    } catch {
+      showStatus("Copy failed", "error");
+    }
+  }
+
+  startBtn.addEventListener("click", startRecording);
+  stopBtn.addEventListener("click", stopRecording);
+  copyBtn.addEventListener("click", () => copyToClipboard(transcriptionText.value, copyBtn));
+  translateBtn.addEventListener("click", translateText);
+  copyTranslationBtn.addEventListener("click", () => copyToClipboard(translationText.value, copyTranslationBtn));
+</script>
+
+</body>
+</html>
